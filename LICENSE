@@ -1,7 +1,11 @@
 MIT License
 
+<<<<<<< HEAD
 Copyright (c) 2025 dsh-abap-mcp contributors
 Server portion (server/) Copyright (c) 2024 mario-andreschak (mcp-abap-abap-adt-api, MIT)
+=======
+Copyright (c) 2026 xiaoliang
+>>>>>>> 9f370b205172b2d4daf46d139f6c66fa4ad53f0e
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
