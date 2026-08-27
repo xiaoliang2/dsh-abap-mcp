@@ -1,0 +1,32 @@
+# npm publish exclusions (works together with the "files" field)
+# "files" already whitelists lib/client/server; these patterns trim inside it.
+
+# npm / install caches (may contain local usernames, download records)
+**/.npm-cache/
+.npm-cache/
+
+# node_modules are auto-excluded by npm, but keep the rule for clarity
+**/node_modules/
+
+# local / machine-specific files (never publish)
+*.log
+**/*.log
+package-lock.json
+**/package-lock.json
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.cer
+
+# build/test leftovers not needed at runtime
+server/tsconfig.json
+server/jest.config.js
+server/test-permissions.mjs
+test-*.mjs
+
+# no test coverage / reports
+coverage/

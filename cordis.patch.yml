@@ -1,0 +1,6 @@
+# dsh bundle patch: inserts this plugin into a profile's layer stack.
+# 通过插件市场或 `dsh plugin add` 安装时，本包会被加入 profile 的
+# `dsh.profile.bundles`，此补丁层在下次启动时自动应用 —— 用户无需手动编辑。
+- insert:
+    - id: abap-mcp
+      name: dsh-abap-mcp

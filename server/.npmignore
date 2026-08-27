@@ -1,0 +1,5 @@
+# server/ has its own .gitignore that ignores `dist` (compiled output).
+# npm packing respects .gitignore, which would drop dist/ from the published
+# tarball — but dist/index.js is the MCP server entry, so re-include it.
+# A .npmignore in this dir replaces the .gitignore for packing purposes.
+!dist
