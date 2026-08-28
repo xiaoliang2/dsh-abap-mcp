@@ -543,6 +543,7 @@ window.__ModuleLoader__.load({
       },
       head: { fontSize: "12px", fontWeight: 600, color: "var(--dsw-alias-label-primary)", marginBottom: "6px" },
       meta: { fontSize: "11px", color: "var(--dsw-alias-label-secondary)", margin: "0 0 6px" },
+      hunkHead: { fontSize: "11px", fontWeight: 600, color: "var(--dsw-alias-label-secondary)", marginBottom: "4px" },
       btn: {
         display: "inline-block",
         margin: "2px 4px 2px 0",
@@ -598,6 +599,24 @@ window.__ModuleLoader__.load({
         setOpen(next);
       }
 
+      // hunk 的旧/新行号区间（含上下文行）：如 旧L65-76 / 新L65-69。
+      function hunkRange(h) {
+        var oldN = 0;
+        var newN = 0;
+        (h.lines || []).forEach(function (l) {
+          if (l.t === "old") oldN++;
+          else if (l.t === "new") newN++;
+          else { oldN++; newN++; }
+        });
+        function rng(start, end) {
+          return end === start ? "L" + start : "L" + start + "-" + end;
+        }
+        return {
+          oldR: rng(h.oldStart, h.oldStart + Math.max(oldN, 1) - 1),
+          newR: rng(h.newStart, h.newStart + Math.max(newN, 1) - 1)
+        };
+      }
+
       var body = null;
       if (!mine) {
         body = React.createElement("div", { style: pvStyles.meta }, t("card.preview.none"));
@@ -607,23 +626,27 @@ window.__ModuleLoader__.load({
             t("card.preview.edit", { label: mine.label, n: mine.hunks.length, add: mine.add, del: mine.del })),
           React.createElement("div", null,
             (mine.hunks || []).map(function (h) {
+              var r = hunkRange(h);
               return React.createElement("button", {
                 key: h.index,
                 style: pvStyles.btn,
                 onClick: function () { toggleHunk(h.index); }
-              }, (open[h.index] ? "▾ " : "▸ ") + "#" + h.index + " L" + h.oldStart);
+              }, (open[h.index] ? "▾ " : "▸ ") + "#" + h.index + " " + r.oldR);
             })
           ),
           (mine.hunks || []).map(function (h) {
             if (!open[h.index]) return null;
-            return React.createElement("div", {
-              key: "h" + h.index,
-              style: pvStyles.pre
-            }, "── #" + h.index + "  旧 L" + h.oldStart + " → 新 L" + h.newStart + "\n" +
-              h.lines.map(function (l) {
+            var r = hunkRange(h);
+            // 逐行渲染：删除行红色、新增行绿色、上下文默认色。
+            return React.createElement("div", { key: "h" + h.index, style: pvStyles.pre },
+              React.createElement("div", { style: pvStyles.hunkHead },
+                "── #" + h.index + "  旧 " + r.oldR + " → 新 " + r.newR),
+              h.lines.map(function (l, i) {
                 var mark = l.t === "old" ? "-" : l.t === "new" ? "+" : " ";
-                return mark + " " + l.text;
-              }).join("\n"));
+                var lineStyle = l.t === "old" ? pvStyles.old : l.t === "new" ? pvStyles.new : undefined;
+                return React.createElement("div", { key: "l" + i, style: lineStyle }, mark + " " + l.text);
+              })
+            );
           })
         );
       } else if (mine.kind === "create") {
