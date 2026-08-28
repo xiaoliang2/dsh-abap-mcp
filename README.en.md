@@ -70,6 +70,18 @@ Enabling **any** permission switch requires **manual confirmation**: the setting
 - Tokens expire after 60 seconds and are reset on restart; re-enable from the card.
 - Disabling all permissions (back to all-off) needs no confirmation and is always allowed.
 
+### Per-write approval (every write prompts a human)
+
+On top of enabling a permission, there is a **second, per-call confirmation** before any real write executes:
+
+- When the model calls any **write tool** (i.e. any tool listed in `CATEGORY_TOOLS` of `server/src/permissions.ts`, such as `setObjectSource` / `deleteObject` / `activateObjects` / `createTransport` / `renameExecute` / `pushRepo` / `debuggerSetBreakpoints`, …), DSH shows its **native approval card** with:
+  - the tool name (e.g. `mcp__abap__setObjectSource`)
+  - a human-readable summary of what will be written (target object name, URL, transport; for source/content arguments it shows an actual snippet plus total length / line count, not a black box)
+  - an **Allow once / Reject** choice
+- The write is forwarded to SAP **only after the user clicks "Allow once"**; rejection, cancellation, or an unavailable approval channel all **fail closed** (nothing is written).
+- This reuses DSH's native approval channel (`ctx.approval` — the same mechanism used for file writes and command escalation), with built-in audit logging and no extra UI.
+- Read-only tools bypass this gate and are unaffected.
+
 ## Installation
 
 ### From npm (official package)

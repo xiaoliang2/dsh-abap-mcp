@@ -92,6 +92,18 @@ server/dist/index.js（MCP 服务器，权限在这里强制生效）
 - 凭据有 60 秒时效，重启后自动过期，需重新在卡片操作。
 - 关闭全部权限（回到全关）无需确认，始终允许。
 
+### 写操作逐次人工确认（每次写入都弹审批）
+
+除了「开启权限」这一层确认，**每次真正的写操作执行前**还有一层**逐次人工确认**：
+
+- 模型调用任意**写工具**（即 `server/src/permissions.ts` 里 `CATEGORY_TOOLS` 列出的工具，如 `setObjectSource` / `deleteObject` / `activateObjects` / `createTransport` / `renameExecute` / `pushRepo` / `debuggerSetBreakpoints` 等）时，DSH 会弹出**原生审批卡**，展示：
+  - 工具名（如 `mcp__abap__setObjectSource`）
+  - 将写入的对象/参数摘要（目标对象名、URL、传输号；源码/内容类参数显示实际内容片段与总长度/行数，不截断成黑盒）
+  - 一次「允许一次 / 拒绝」的选择
+- 只有用户点击**「允许一次」**，该次写操作才会真正向 SAP 执行；**拒绝 / 取消 / 无审批通道时一律不写入**（fail-closed）。
+- 该机制复用 DSH 原生审批通道（`ctx.approval`，与文件写入、命令执行的越权审批同款），自带审计日志，无需额外 UI。
+- 只读工具不经过此确认，不受影响。
+
 ## 安装
 
 ### 从 npm（正式包）

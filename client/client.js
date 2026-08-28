@@ -56,6 +56,7 @@ window.__ModuleLoader__.load({
       "card.mode": "权限模式",
       "card.note": "⚠ 仅建议在开发/测试系统使用最小权限账号；密码保存在 DSH 凭据库（.credentials.yaml），不写入配置文档。连接配置变更会自动重连。",
       "card.permConfirm": "开启任意权限需在本卡片确认（自动生成一次性凭据）；通过其他方式修改的权限不会生效。",
+      "card.writeApproval": "写确认：所有写操作（写入/删除/激活/传输/重构/执行/Git/调试变量/发布绑定）执行前都会弹出人工确认，展示将写入的内容，批准后才会真正执行。",
     };
 
     var en = {
@@ -98,6 +99,7 @@ window.__ModuleLoader__.load({
       "card.mode": "Permission mode",
       "card.note": "⚠ Recommended for dev/test systems with a least-privilege account. The password is kept in the DSH credentials store (.credentials.yaml), not in the config document. Config changes auto-reconnect.",
       "card.permConfirm": "Enabling any permission must be confirmed from this card (a one-time token is generated); permissions changed by other means won't take effect.",
+      "card.writeApproval": "Write approval: every write operation (write/delete/activate/transport/refactor/exec/git/debug-variable/publish binding) prompts a human approval showing what will be written, and only runs after approval.",
     };
 
     var PERMS = [
@@ -484,6 +486,7 @@ window.__ModuleLoader__.load({
             }, (perms[id] === true ? "ON " : "OFF ") + id));
         }),
         React.createElement("p", { style: styles.hint }, t("card.permConfirm")),
+        React.createElement("p", { style: styles.hint }, t("card.writeApproval")),
 
         React.createElement("p", { style: styles.note }, t("card.note")));
     }
