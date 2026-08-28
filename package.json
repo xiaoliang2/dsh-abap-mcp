@@ -1,6 +1,6 @@
 {
   "name": "@xiaobanli/dsh-abap-mcp",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "DeepSeek Harness plugin: connect SAP ABAP ADT over MCP with a read-only-by-default permission model, configured from the Settings page. · DSH 插件：通过 MCP 连接 SAP ABAP ADT，默认只读 + 7 类写权限开关，设置页卡片配置。",
   "type": "module",
   "main": "lib/index.js",
