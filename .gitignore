@@ -3,3 +3,8 @@ node_modules/
 package-lock.json
 *.log
 *.tgz
+
+# env / secrets
+.env
+.env.*
+!.env.example
