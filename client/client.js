@@ -56,6 +56,9 @@ window.__ModuleLoader__.load({
       "card.mode": "权限模式",
       "card.note": "⚠ 仅建议在开发/测试系统使用最小权限账号；密码保存在 DSH 凭据库（.credentials.yaml），不写入配置文档。连接配置变更会自动重连。",
       "card.permConfirm": "开启任意权限需在本卡片确认（自动生成一次性凭据）；通过其他方式修改的权限不会生效。",
+      "card.writeConfirm": "写确认（每次写入前弹人工确认）",
+      "card.writeConfirm.on": "写确认已开启：每次写操作前都会弹出审批卡，展示将写入的内容，确认后才执行。",
+      "card.writeConfirm.off": "写确认已关闭：写工具在权限已开启时直接执行，不弹审批（不推荐）。",
       "card.writeApproval": "写确认：所有写操作（写入/删除/激活/传输/重构/执行/Git/调试变量/发布绑定）执行前都会弹出人工确认，展示将写入的内容，批准后才会真正执行。",
     };
 
@@ -99,6 +102,9 @@ window.__ModuleLoader__.load({
       "card.mode": "Permission mode",
       "card.note": "⚠ Recommended for dev/test systems with a least-privilege account. The password is kept in the DSH credentials store (.credentials.yaml), not in the config document. Config changes auto-reconnect.",
       "card.permConfirm": "Enabling any permission must be confirmed from this card (a one-time token is generated); permissions changed by other means won't take effect.",
+      "card.writeConfirm": "Write confirmation (prompt before every write)",
+      "card.writeConfirm.on": "Write confirmation is ON: every write operation shows an approval card with what will be written, and only runs after approval.",
+      "card.writeConfirm.off": "Write confirmation is OFF: write tools execute directly once their permission is enabled, without prompting (not recommended).",
       "card.writeApproval": "Write approval: every write operation (write/delete/activate/transport/refactor/exec/git/debug-variable/publish binding) prompts a human approval showing what will be written, and only runs after approval.",
     };
 
@@ -197,6 +203,7 @@ window.__ModuleLoader__.load({
       var client = typeof value.client === "string" ? value.client : "000";
       var language = typeof value.language === "string" ? value.language : "EN";
       var perms = value.permissions && typeof value.permissions === "object" ? value.permissions : {};
+      var writeConfirm = value.writeConfirm !== false; // 默认 true = 开启写确认
       var status = value.status && typeof value.status === "object" ? value.status : {};
 
       // 文本字段先暂存本地草稿，点「保存」一次性提交（避免逐键触发重连）。
@@ -371,6 +378,10 @@ window.__ModuleLoader__.load({
         scope.set("enabled", !enabled);
       }
 
+      function toggleWriteConfirm() {
+        scope.set("writeConfirm", !writeConfirm);
+      }
+
       function togglePerm(id) {
         var next = Object.assign({}, perms, { [id]: !perms[id] });
         var hasOn = Object.keys(next).some(function (k) { return next[k] === true; });
@@ -475,6 +486,16 @@ window.__ModuleLoader__.load({
                       ? " · " + lastTest.latencyMs + "ms · " + t("card.test.tools").replace("{n}", String(lastTest.tools))
                       : (lastTest.error ? " — " + lastTest.error : "")))
                 : React.createElement("span", { style: styles.hint }, t("card.test.never")))),
+
+        React.createElement("div", { style: styles.section }, t("card.writeConfirm")),
+        React.createElement("div", { style: styles.permRow },
+          React.createElement("span", { style: styles.label }, t("card.writeConfirm")),
+          React.createElement("button", {
+            style: Object.assign({}, styles.badge, writeConfirm ? styles.on : styles.off),
+            onClick: toggleWriteConfirm,
+          }, (writeConfirm ? "ON " : "OFF ") + "writeConfirm")),
+        React.createElement("p", { style: styles.hint },
+          writeConfirm ? t("card.writeConfirm.on") : t("card.writeConfirm.off")),
 
         React.createElement("div", { style: styles.section }, t("card.perms")),
         PERMS.map(function (id) {

@@ -70,9 +70,9 @@ Enabling **any** permission switch requires **manual confirmation**: the setting
 - Tokens expire after 60 seconds and are reset on restart; re-enable from the card.
 - Disabling all permissions (back to all-off) needs no confirmation and is always allowed.
 
-### Per-write approval (every write prompts a human)
+### Per-write approval (every write prompts a human, toggleable)
 
-On top of enabling a permission, there is a **second, per-call confirmation** before any real write executes:
+On top of enabling a permission, there is a **second, per-call confirmation** before any real write executes — controlled by the **`writeConfirm` switch** on the settings card (**ON by default**):
 
 - When the model calls any **write tool** (i.e. any tool listed in `CATEGORY_TOOLS` of `server/src/permissions.ts`, such as `setObjectSource` / `deleteObject` / `activateObjects` / `createTransport` / `renameExecute` / `pushRepo` / `debuggerSetBreakpoints`, …), DSH shows its **native approval card** with:
   - the tool name (e.g. `mcp__abap__setObjectSource`)
@@ -81,6 +81,8 @@ On top of enabling a permission, there is a **second, per-call confirmation** be
 - The write is forwarded to SAP **only after the user clicks "Allow once"**; rejection, cancellation, or an unavailable approval channel all **fail closed** (nothing is written).
 - This reuses DSH's native approval channel (`ctx.approval` — the same mechanism used for file writes and command escalation), with built-in audit logging and no extra UI.
 - Read-only tools bypass this gate and are unaffected.
+- **With `writeConfirm` OFF**: write tools execute directly once their permission is enabled, without prompting (not recommended — only when you fully trust the write operations).
+- The switch state is reflected in `abap_mcp_status.writeConfirm`; it does not participate in reconnect decisions.
 
 ## Installation
 

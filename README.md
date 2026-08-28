@@ -92,9 +92,9 @@ server/dist/index.js（MCP 服务器，权限在这里强制生效）
 - 凭据有 60 秒时效，重启后自动过期，需重新在卡片操作。
 - 关闭全部权限（回到全关）无需确认，始终允许。
 
-### 写操作逐次人工确认（每次写入都弹审批）
+### 写操作逐次人工确认（每次写入都弹审批，可开关）
 
-除了「开启权限」这一层确认，**每次真正的写操作执行前**还有一层**逐次人工确认**：
+除了「开启权限」这一层确认，**每次真正的写操作执行前**还有一层**逐次人工确认**（设置页卡片上的 **`writeConfirm` 开关**，**默认开启**）：
 
 - 模型调用任意**写工具**（即 `server/src/permissions.ts` 里 `CATEGORY_TOOLS` 列出的工具，如 `setObjectSource` / `deleteObject` / `activateObjects` / `createTransport` / `renameExecute` / `pushRepo` / `debuggerSetBreakpoints` 等）时，DSH 会弹出**原生审批卡**，展示：
   - 工具名（如 `mcp__abap__setObjectSource`）
@@ -103,6 +103,8 @@ server/dist/index.js（MCP 服务器，权限在这里强制生效）
 - 只有用户点击**「允许一次」**，该次写操作才会真正向 SAP 执行；**拒绝 / 取消 / 无审批通道时一律不写入**（fail-closed）。
 - 该机制复用 DSH 原生审批通道（`ctx.approval`，与文件写入、命令执行的越权审批同款），自带审计日志，无需额外 UI。
 - 只读工具不经过此确认，不受影响。
+- **关闭 `writeConfirm` 后**：写工具在对应权限已开启时直接执行、不弹审批（不推荐，仅当对写操作有充分信任时使用）。
+- 开关状态会反映在 `abap_mcp_status.writeConfirm`；该字段不参与重连判定。
 
 ## 安装
 
