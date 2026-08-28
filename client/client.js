@@ -24,6 +24,9 @@ window.__ModuleLoader__.load({
       "card.url": "SAP 地址（https://host:port/sap/bc/adt）",
       "card.user": "用户名",
       "card.password": "密码",
+      "card.password.keep": "已配置，留空保持不变",
+      "card.password.unset": "未设置",
+      "card.password.clear": "清除密码",
       "card.client": "客户端（Client）",
       "card.language": "语言",
       "card.save": "保存并应用",
@@ -51,7 +54,7 @@ window.__ModuleLoader__.load({
       "card.status.err": "连接失败",
       "card.tools": "已注册工具",
       "card.mode": "权限模式",
-      "card.note": "⚠ 仅建议在开发/测试系统使用最小权限账号；密码以明文存于本地 settings.yaml。连接配置变更会自动重连。",
+      "card.note": "⚠ 仅建议在开发/测试系统使用最小权限账号；密码保存在 DSH 凭据库（.credentials.yaml），不写入配置文档。连接配置变更会自动重连。",
       "card.permConfirm": "开启任意权限需在本卡片确认（自动生成一次性凭据）；通过其他方式修改的权限不会生效。",
     };
 
@@ -63,6 +66,9 @@ window.__ModuleLoader__.load({
       "card.url": "SAP URL (https://host:port/sap/bc/adt)",
       "card.user": "User",
       "card.password": "Password",
+      "card.password.keep": "Configured — leave blank to keep",
+      "card.password.unset": "Not set",
+      "card.password.clear": "Clear password",
       "card.client": "Client",
       "card.language": "Language",
       "card.save": "Save & apply",
@@ -90,7 +96,7 @@ window.__ModuleLoader__.load({
       "card.status.err": "Connection failed",
       "card.tools": "Registered tools",
       "card.mode": "Permission mode",
-      "card.note": "⚠ Recommended for dev/test systems with a least-privilege account. The password is stored in plaintext in local settings.yaml. Config changes auto-reconnect.",
+      "card.note": "⚠ Recommended for dev/test systems with a least-privilege account. The password is kept in the DSH credentials store (.credentials.yaml), not in the config document. Config changes auto-reconnect.",
       "card.permConfirm": "Enabling any permission must be confirmed from this card (a one-time token is generated); permissions changed by other means won't take effect.",
     };
 
@@ -143,9 +149,21 @@ window.__ModuleLoader__.load({
         borderRadius: "4px",
         cursor: "pointer",
       },
+      clearBtn: {
+        padding: "4px 10px",
+        fontSize: "11px",
+        fontWeight: 600,
+        background: "transparent",
+        color: "var(--dsw-alias-state-error-primary)",
+        border: "1px solid var(--dsw-alias-stroke-default, rgba(128,128,128,0.35))",
+        borderRadius: "4px",
+        cursor: "pointer",
+        whiteSpace: "nowrap",
+      },
       badge: { display: "inline-block", padding: "0 8px", borderRadius: "999px", fontSize: "11px", fontWeight: 600, border: "none", cursor: "pointer" },
       on: { background: "var(--dsw-alias-state-success-primary)", color: "#fff" },
       off: { background: "var(--dsw-alias-state-warn-primary)", color: "#000" },
+      permRow: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", fontSize: "12px" },
       statusOk: { color: "var(--dsw-alias-state-success-primary)", fontWeight: 600 },
       statusErr: { color: "var(--dsw-alias-state-error-primary)", fontWeight: 600 },
       statusWait: { color: "var(--dsw-alias-label-secondary)", fontWeight: 600 },
@@ -161,7 +179,7 @@ window.__ModuleLoader__.load({
       },
     };
 
-    function AbapMcpCard({ t, scope }) {
+    function AbapMcpCard({ t, scope, api, remote, passwordRef }) {
       var snapshot = useSyncExternalStore(
         function (subscribe) {
           return scope.subscribe(subscribe);
@@ -174,17 +192,17 @@ window.__ModuleLoader__.load({
       var enabled = value.enabled === true;
       var url = typeof value.url === "string" ? value.url : "";
       var user = typeof value.user === "string" ? value.user : "";
-      var password = typeof value.password === "string" ? value.password : "";
       var client = typeof value.client === "string" ? value.client : "000";
       var language = typeof value.language === "string" ? value.language : "EN";
       var perms = value.permissions && typeof value.permissions === "object" ? value.permissions : {};
       var status = value.status && typeof value.status === "object" ? value.status : {};
 
       // 文本字段先暂存本地草稿，点「保存」一次性提交（避免逐键触发重连）。
+      // 密码不来自 settings：保存在凭据库、客户端读不回明文，本地草稿恒为空串起步。
       var state = React.useState({
         url: url,
         user: user,
-        password: password,
+        password: "",
         client: client,
         language: language,
       });
@@ -202,14 +220,77 @@ window.__ModuleLoader__.load({
       var setTestMsg = msgState[1];
       var timeoutRef = React.useRef(null);
 
+      // 凭据库里的“是否已配置密码”（只读状态，读不回明文）。
+      var pwdState = React.useState(false);
+      var passwordConfigured = pwdState[0];
+      var setPwdConfigured = pwdState[1];
+
+      function readPasswordConfigured() {
+        if (!api) return Promise.resolve(false);
+        return api.credentials.describe({ refs: [passwordRef] }).then(function (resp) {
+          var view = resp && resp.result && resp.result.value && resp.result.value.credentials
+            ? resp.result.value.credentials[passwordRef]
+            : null;
+          var next = !!(view && view.configured);
+          setPwdConfigured(next);
+          return next;
+        }).catch(function () { return false; });
+      }
+
+      // 密码写入 DSH 凭据库（api.credentials.set），写后清掉本地回显、刷新“已配置”状态。
+      function writePassword(value) {
+        if (!api) return Promise.resolve();
+        return api.credentials.set({ ref: passwordRef, value: value }).then(function () {
+          setDraft(Object.assign({}, draft, { password: "" }));
+          return readPasswordConfigured();
+        }).catch(function () { return false; });
+      }
+
+      function clearPassword() {
+        if (!api) return;
+        api.credentials.unset({ ref: passwordRef }).then(readPasswordConfigured).catch(function () {});
+      }
+
+      // 挂载时读一次“是否已配置密码”，并订阅凭据变更事件保持同步（例如其他入口写了同一引用）。
+      React.useEffect(function () {
+        if (!api) return;
+        var cancelled = false;
+        function refresh() {
+          api.credentials.describe({ refs: [passwordRef] }).then(function (resp) {
+            if (cancelled) return;
+            var view = resp && resp.result && resp.result.value && resp.result.value.credentials
+              ? resp.result.value.credentials[passwordRef]
+              : null;
+            setPwdConfigured(!!(view && view.configured));
+          }).catch(function () {});
+        }
+        refresh();
+        if (!remote) return function () { cancelled = true; };
+        var off = remote.$on("credentials/reference-updated", function (ref) {
+          if (ref === passwordRef) refresh();
+        });
+        return function () {
+          cancelled = true;
+          if (off) off();
+        };
+      }, []);
+
       function commitFields() {
         setSaved(false);
-        scope.set("url", draft.url || "");
-        scope.set("user", draft.user || "");
-        scope.set("password", draft.password || "");
-        scope.set("client", draft.client || "000");
-        scope.set("language", draft.language || "EN");
-        setSaved(true);
+        var writes = [
+          scope.set("url", draft.url || ""),
+          scope.set("user", draft.user || ""),
+          scope.set("client", draft.client || "000"),
+          scope.set("language", draft.language || "EN")
+        ];
+        if (draft.password) writes.push(writePassword(draft.password));
+        return Promise.all(writes).then(function () {
+          setSaved(true);
+          return true;
+        }).catch(function () {
+          setSaved(true);
+          return false;
+        });
       }
 
       // testRequest 写入可能因 settings revision 冲突被静默丢弃（写入管线 recover 只重载镜像、不重试）。
@@ -235,21 +316,24 @@ window.__ModuleLoader__.load({
       // 「测试连接」：先本地校验必填项（避免空输入也去 Host 空转一轮导致闪烁），
       // 通过后再把当前表单落盘并向 Host 发出测试请求（时间戳）。
       function testConnection() {
-        var need = !(draft.url || "").trim() || !(draft.user || "").trim() || !(draft.password || "").trim();
+        var hasPwd = !!(draft.password || "").trim() || passwordConfigured;
+        var need = !(draft.url || "").trim() || !(draft.user || "").trim() || !hasPwd;
         if (need) {
           setTestMsg(t("card.test.needConfig"));
           setTestPending(false);
           return;
         }
         setTestMsg("");
-        commitFields();
         setTestPending(true);
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
         timeoutRef.current = setTimeout(function () {
           setTestPending(false);
           setTestMsg(t("card.test.timeout"));
         }, 60000);
-        writeTestRequest().then(function (ok) {
+        // 先落盘（含密码→凭据库），再发测试请求；测试要用新配置。
+        commitFields().then(function () {
+          return writeTestRequest();
+        }).then(function (ok) {
           if (!ok) {
             setTestPending(false);
             setTestMsg(t("card.test.failWrite"));
@@ -336,10 +420,38 @@ window.__ModuleLoader__.load({
             onClick: toggleEnabled,
           }, (enabled ? "ON " : "OFF ") + t("card.enabled"))),
 
+        React.createElement("div", { style: styles.section }, t("card.status")),
+        React.createElement("div", { style: styles.row },
+          status.ok === true
+            ? React.createElement("span", { style: styles.statusOk }, "● " + t("card.status.ok"))
+            : (status.error
+                ? React.createElement("span", { style: styles.statusErr }, "● " + t("card.status.err"))
+                : React.createElement("span", { style: styles.statusWait }, "○ " + t("card.status.waiting"))),
+          React.createElement("span", { style: styles.hint }, t("card.mode") + ": " + mode),
+          React.createElement("span", { style: styles.hint }, t("card.tools") + ": " + (status.tools || 0))),
+        status.error ? React.createElement("p", { style: styles.statusErr }, status.error) : null,
+
         React.createElement("div", { style: styles.section }, t("card.conn")),
         field(t("card.url"), "url", "https://host:port/sap/bc/adt"),
         field(t("card.user"), "user", ""),
-        field(t("card.password"), "password", "", "password"),
+        React.createElement("div", { style: styles.row },
+          React.createElement("span", { style: styles.label }, t("card.password")),
+          React.createElement("input", {
+            style: styles.input,
+            type: "password",
+            placeholder: passwordConfigured ? t("card.password.keep") : t("card.password.unset"),
+            value: draft.password,
+            onChange: function (e) {
+              var next = Object.assign({}, draft);
+              next.password = e.target.value;
+              setDraft(next);
+              setSaved(false);
+              setTestMsg("");
+            },
+          }),
+          passwordConfigured
+            ? React.createElement("button", { style: styles.clearBtn, onClick: clearPassword }, t("card.password.clear"))
+            : null),
         React.createElement("div", { style: styles.row },
           field(t("card.client"), "client", "000"),
           field(t("card.language"), "language", "EN")),
@@ -364,31 +476,22 @@ window.__ModuleLoader__.load({
 
         React.createElement("div", { style: styles.section }, t("card.perms")),
         PERMS.map(function (id) {
-          return React.createElement("div", { key: id, style: styles.row },
+          return React.createElement("div", { key: id, style: styles.permRow },
+            React.createElement("span", { style: styles.label }, t("card.perm." + id)),
             React.createElement("button", {
               style: Object.assign({}, styles.badge, perms[id] === true ? styles.on : styles.off),
               onClick: function () { togglePerm(id); },
-            }, (perms[id] === true ? "ON " : "OFF ") + id),
-            React.createElement("span", { style: styles.label }, t("card.perm." + id)));
+            }, (perms[id] === true ? "ON " : "OFF ") + id));
         }),
         React.createElement("p", { style: styles.hint }, t("card.permConfirm")),
-
-        React.createElement("div", { style: styles.section }, t("card.status")),
-        React.createElement("div", { style: styles.row },
-          status.ok === true
-            ? React.createElement("span", { style: styles.statusOk }, "● " + t("card.status.ok"))
-            : (status.error
-                ? React.createElement("span", { style: styles.statusErr }, "● " + t("card.status.err"))
-                : React.createElement("span", { style: styles.statusWait }, "○ " + t("card.status.waiting"))),
-          React.createElement("span", { style: styles.hint }, t("card.mode") + ": " + mode),
-          React.createElement("span", { style: styles.hint }, t("card.tools") + ": " + (status.tools || 0))),
-        status.error ? React.createElement("p", { style: styles.statusErr }, status.error) : null,
 
         React.createElement("p", { style: styles.note }, t("card.note")));
     }
 
     var name = "dsh-abap-mcp";
-    var inject = ["slots", "locale", "settingsScope"];
+    var inject = ["slots", "locale", "settingsScope", "connection", "remote"];
+    // 与 Host 侧一致的凭据引用名（SAP 密码）。
+    var PASSWORD_REF = "SAP_PASSWORD";
 
     function apply(ctx) {
       ctx.effect(function () {
@@ -396,6 +499,9 @@ window.__ModuleLoader__.load({
       }, "dsh-abap-mcp: dictionaries");
       var t = ctx.locale.bind(NS);
       var scope = ctx.settingsScope.bind({ namespace: NS });
+      var conn = ctx.get("connection");
+      var api = conn && conn.api ? conn.api : null;
+      var remote = ctx.get("remote") || null;
       ctx.slots.inject("settings.section", function () {
         return ctx.slots.register({
           name: "settings.section",
@@ -403,7 +509,13 @@ window.__ModuleLoader__.load({
           order: 35,
           label: function () { return t("card.title"); }
         }, function () {
-          return React.createElement(AbapMcpCard, { t: t, scope: scope });
+          return React.createElement(AbapMcpCard, {
+            t: t,
+            scope: scope,
+            api: api,
+            remote: remote,
+            passwordRef: PASSWORD_REF
+          });
         });
       });
     }

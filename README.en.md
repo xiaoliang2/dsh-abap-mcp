@@ -107,13 +107,23 @@ After restarting DSH, an "ABAP MCP" card appears on the left side of the setting
 | Client / Language | e.g. `000` / `EN` |
 | 7 write-permission switches | Check to enable the corresponding write capability |
 
-After saving, the Host reconnects automatically; you can also ask the model for `abap_mcp_status` to view connection state in the conversation.
+### Recommended workflow
+
+1. Fill in the SAP URL / username / password on the card (the password is stored in the DSH credentials store; the card is write-only).
+2. Click "Test connection" first: a success result (~75 tools) means the config and network are fine.
+3. Then turn on the "Enable connection" master switch.
+4. **Wait a few seconds**, then check the connection status (the status block on the card, or ask the model for `abap_mcp_status`).
+   - "Connected / read-only / N tools" means success.
+   - If it still shows failure, paste the `error` field from `abap_mcp_status` for troubleshooting.
+
+After saving, the Host reconnects per the current config; you can also ask the model for `abap_mcp_status` to view connection state in the conversation.
 
 **"Test connection" button**: persists the current form first, then does a real spawn → connect → tool enumeration → disconnect using the current config. The result (success/failure, latency, tool count) is shown next to the button; it does **not** change the "Enable connection" switch.
 - If SAP URL / username / password are missing, the button directly prompts "Please fill in the configuration first" without running a pointless test.
 - While testing, the button shows "Testing…"; it times out automatically with a message after 60 seconds with no result.
 - The test result (`status.lastTest`) stays visible next to the button and is not wiped by a reconnect-status refresh.
 - The test is one-shot: it does **not** trigger a persistent connection or auto-reconnect, and a failed test does not enter the backoff retry; only a config change (enable switch / connection fields / permissions) triggers the persistent connection with bounded backoff (max 5 attempts before giving up).
+- If the test succeeds while the connection is **enabled**, the plugin also brings up the persistent connection so the card shows connected immediately; a failed test leaves everything as-is (no retry, no reconnect).
 
 ## Building the server (after modifying `server/`)
 
@@ -147,7 +157,7 @@ node node_modules/typescript/bin/tsc -p tsconfig.json   # produces dist/
 
 - **Read-only ≠ harmless**: read-only tools can still read source code and business data from the production system. **It is strongly recommended to connect to development/test systems with a least-privilege account** (the permission switches are a DSH-side guardrail, not a substitute for SAP-side authorization).
 - The server prints the permission mode and a "recommended for dev/test only" notice at startup (a recommendation + notice, not enforcement).
-- The password is stored **in plain text** in the local `settings.yaml` (persisted by DSH's settings service). For a higher security level, extend this to a `credentials` service store yourself.
+- The password is kept in the DSH **credentials store** (`$DSH_HOME/.credentials.yaml`, `credentials` service, ref `SAP_PASSWORD`); the settings card is write-only and never reads it back. On first start the plugin migrates any plaintext password left in `settings.yaml` into the store and clears the legacy field. If `SAP_PASSWORD` is set in the launch environment it wins and the stored entry is read-only (same behavior as `DEEPSEEK_API_KEY`). Connection settings (`url` / `user` / `client` / `language` / permission switches) still live in `settings.yaml`.
 - The server child process only inherits the SDK-allowlisted environment variables plus the `SAP_*` and `MCP_ABAP_PERMISSIONS` values explicitly injected by this plugin; it does not leak the host's remaining environment variables.
 
 ## License
