@@ -3,4 +3,4 @@
 # `dsh.profile.bundles`，此补丁层在下次启动时自动应用 —— 用户无需手动编辑。
 - insert:
     - id: abap-mcp
-      name: dsh-abap-mcp
+      name: '@xiaobanli/dsh-abap-mcp'
