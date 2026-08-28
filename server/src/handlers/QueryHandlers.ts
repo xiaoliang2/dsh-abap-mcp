@@ -2,6 +2,26 @@ import { ADTClient } from 'abap-adt-api';
 import { BaseHandler } from './BaseHandler.js';
 import type { ToolDefinition } from '../types/tools.js';
 
+// runQuery 走 ADT Data Preview 的 freestyle SQL 端点，本应只读，但部分后端允许 DML。
+// 为堵死「无权限、无写确认的隐藏写通道」，这里做确定性白名单：只放行 SELECT 类只读
+// 语句，且不允许分号拼接多语句。命中非白名单前缀 → 抛错，绝不把语句发给后端。
+const READ_ONLY_SQL_RE = /^\s*(SELECT|WITH|EXPLAIN|DESCRIBE)\b/i;
+
+function assertReadOnlyQuery(sql: string): void {
+    const trimmed = (sql ?? '').trim();
+    if (trimmed.length === 0) {
+        throw new Error('runQuery: 空 SQL 不允许执行');
+    }
+    if (trimmed.includes(';')) {
+        throw new Error('runQuery: 不允许分号拼接多语句（仅支持单条只读查询）');
+    }
+    if (!READ_ONLY_SQL_RE.test(trimmed)) {
+        throw new Error(
+            `runQuery: 只允许只读 SQL（SELECT / WITH / EXPLAIN / DESCRIBE），拒绝执行：${trimmed.slice(0, 120)}`
+        );
+    }
+}
+
 export class QueryHandlers extends BaseHandler {
     getTools(): ToolDefinition[] {
         return [
@@ -102,8 +122,10 @@ export class QueryHandlers extends BaseHandler {
     async handleRunQuery(args: any): Promise<any> {
         const startTime = performance.now();
         try {
+            const sql = typeof args?.sqlQuery === 'string' ? args.sqlQuery : '';
+            assertReadOnlyQuery(sql);
             const result = await this.adtclient.runQuery(
-                args.sqlQuery,
+                sql,
                 args.rowNumber,
                 args.decode
             );

@@ -60,6 +60,13 @@ window.__ModuleLoader__.load({
       "card.writeConfirm.on": "写确认已开启：每次写操作前都会弹出审批卡，展示将写入的内容，确认后才执行。",
       "card.writeConfirm.off": "写确认已关闭：写工具在权限已开启时直接执行，不弹审批（不推荐）。",
       "card.writeApproval": "写确认：所有写操作（写入/删除/激活/传输/重构/执行/Git/调试变量/发布绑定）执行前都会弹出人工确认，展示将写入的内容，批准后才会真正执行。",
+      "card.preview.title": "写前预览（点击序号查看改动）",
+      "card.preview.none": "暂无预览数据（该操作无可预览的源码差异）。",
+      "card.preview.edit": "对象 {label}：共 {n} 处改动（+{add}/-{del}），点击序号展开/折叠。",
+      "card.preview.create": "对象 {label}（新建）：源码 {n} 行。",
+      "card.preview.other": "对象 {label}：将执行写入操作。",
+      "card.preview.show": "展开完整源码",
+      "card.preview.hide": "收起",
     };
 
     var en = {
@@ -106,6 +113,13 @@ window.__ModuleLoader__.load({
       "card.writeConfirm.on": "Write confirmation is ON: every write operation shows an approval card with what will be written, and only runs after approval.",
       "card.writeConfirm.off": "Write confirmation is OFF: write tools execute directly once their permission is enabled, without prompting (not recommended).",
       "card.writeApproval": "Write approval: every write operation (write/delete/activate/transport/refactor/exec/git/debug-variable/publish binding) prompts a human approval showing what will be written, and only runs after approval.",
+      "card.preview.title": "Write preview (click a number to expand)",
+      "card.preview.none": "No preview available (no source diff to show).",
+      "card.preview.edit": "Object {label}: {n} change(s) (+{add}/-{del}); click a number to expand.",
+      "card.preview.create": "Object {label} (new): {n} source line(s).",
+      "card.preview.other": "Object {label}: write operation will run.",
+      "card.preview.show": "Expand full source",
+      "card.preview.hide": "Collapse",
     };
 
     var PERMS = [
@@ -512,6 +526,128 @@ window.__ModuleLoader__.load({
         React.createElement("p", { style: styles.note }, t("card.note")));
     }
 
+    // 参与「写前预览」工具卡的写工具（wire 名）。key 未被默认卡片占用，注册是叠加。
+    var WRITE_TOOLVIEW_KEYS = [
+      "mcp__abap__setObjectSource",
+      "mcp__abap__createObject",
+      "mcp__abap__createTestInclude",
+    ];
+
+    var pvStyles = {
+      box: {
+        border: "1px solid var(--dsw-alias-stroke-default, rgba(128,128,128,0.35))",
+        borderRadius: "6px",
+        padding: "8px 10px",
+        margin: "2px 0 6px",
+        background: "var(--dsw-alias-bg-layer-1, rgba(128,128,128,0.05))",
+      },
+      head: { fontSize: "12px", fontWeight: 600, color: "var(--dsw-alias-label-primary)", marginBottom: "6px" },
+      meta: { fontSize: "11px", color: "var(--dsw-alias-label-secondary)", margin: "0 0 6px" },
+      btn: {
+        display: "inline-block",
+        margin: "2px 4px 2px 0",
+        padding: "2px 9px",
+        fontSize: "11px",
+        fontWeight: 600,
+        borderRadius: "4px",
+        border: "1px solid var(--dsw-alias-stroke-default, rgba(128,128,128,0.35))",
+        background: "var(--dsw-alias-bg-layer-2, rgba(128,128,128,0.10))",
+        color: "var(--dsw-alias-label-primary)",
+        cursor: "pointer",
+      },
+      pre: {
+        margin: "4px 0 0",
+        padding: "6px 8px",
+        fontSize: "11px",
+        lineHeight: "16px",
+        fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+        background: "var(--dsw-alias-bg-layer-2, rgba(128,128,128,0.08))",
+        borderRadius: "4px",
+        overflowX: "auto",
+        whiteSpace: "pre",
+      },
+      old: { color: "var(--dsw-alias-state-error-primary, #ef4444)" },
+      new: { color: "var(--dsw-alias-state-success-primary, #22c55e)" },
+    };
+
+    // 工具卡「写前预览」：读 Host 经设置命名空间下发的 writePreview（按 callId 匹配），
+    // 渲染 序号按钮 + 点击展开（编辑类显示 diff hunk；新建类显示完整源码）。审批按钮
+    // 仍在原生审批卡上，本卡只负责「让用户看清将写入什么」。
+    function WriteToolView(props) {
+      var t = props.t;
+      var scope = props.scope;
+      var callId = props.callId;
+      var snapshot = useSyncExternalStore(
+        function (subscribe) { return scope.subscribe(subscribe); },
+        function () { return scope.getSnapshot(); }
+      );
+      var value = snapshot.value || {};
+      var preview = value.writePreview && typeof value.writePreview === "object" ? value.writePreview : null;
+      var mine = preview && preview.callId === callId ? preview : null;
+
+      var openState = React.useState({});
+      var open = openState[0];
+      var setOpen = openState[1];
+      var fullState = React.useState(false);
+      var showFull = fullState[0];
+      var setShowFull = fullState[1];
+
+      function toggleHunk(i) {
+        var next = Object.assign({}, open);
+        next[i] = !next[i];
+        setOpen(next);
+      }
+
+      var body = null;
+      if (!mine) {
+        body = React.createElement("div", { style: pvStyles.meta }, t("card.preview.none"));
+      } else if (mine.kind === "edit") {
+        body = React.createElement("div", null,
+          React.createElement("div", { style: pvStyles.meta },
+            t("card.preview.edit", { label: mine.label, n: mine.hunks.length, add: mine.add, del: mine.del })),
+          React.createElement("div", null,
+            (mine.hunks || []).map(function (h) {
+              return React.createElement("button", {
+                key: h.index,
+                style: pvStyles.btn,
+                onClick: function () { toggleHunk(h.index); }
+              }, (open[h.index] ? "▾ " : "▸ ") + "#" + h.index + " L" + h.oldStart);
+            })
+          ),
+          (mine.hunks || []).map(function (h) {
+            if (!open[h.index]) return null;
+            return React.createElement("div", {
+              key: "h" + h.index,
+              style: pvStyles.pre
+            }, "── #" + h.index + "  旧 L" + h.oldStart + " → 新 L" + h.newStart + "\n" +
+              h.lines.map(function (l) {
+                var mark = l.t === "old" ? "-" : l.t === "new" ? "+" : " ";
+                return mark + " " + l.text;
+              }).join("\n"));
+          })
+        );
+      } else if (mine.kind === "create") {
+        body = React.createElement("div", null,
+          React.createElement("div", { style: pvStyles.meta },
+            t("card.preview.create", { label: mine.label, n: mine.lineCount })),
+          React.createElement("button", {
+            style: pvStyles.btn,
+            onClick: function () { setShowFull(!showFull); }
+          }, (showFull ? "▾ " : "▸ ") + (showFull ? t("card.preview.hide") : t("card.preview.show"))),
+          showFull ? React.createElement("div", { style: pvStyles.pre }, mine.source) : null
+        );
+      } else {
+        body = React.createElement("div", { style: pvStyles.meta },
+          t("card.preview.other", { label: mine.label }));
+      }
+
+      return React.createElement("div", null,
+        React.createElement("div", { style: pvStyles.box },
+          React.createElement("div", { style: pvStyles.head }, t("card.preview.title")),
+          body)
+      );
+    }
+
     var name = "dsh-abap-mcp";
     var inject = ["slots", "locale", "settingsScope", "connection", "remote"];
     // 与 Host 侧一致的凭据引用名（SAP 密码）。
@@ -541,6 +677,27 @@ window.__ModuleLoader__.load({
             passwordRef: PASSWORD_REF
           });
         });
+      });
+
+      // 写工具工具卡：为源码类写工具注册「写前预览」视图（序号 + 点击展开）。
+      // key 未被默认卡片占用 → 叠加；props 提供 callId，据此匹配 Host 下发的 writePreview。
+      ctx.slots.inject("tool.call.toolview", function () {
+        var disposers = [];
+        WRITE_TOOLVIEW_KEYS.forEach(function (key) {
+          disposers.push(ctx.slots.register({
+            name: "tool.call.toolview",
+            key: key
+          }, function (props) {
+            return React.createElement(WriteToolView, {
+              t: t,
+              scope: scope,
+              callId: props.callId
+            });
+          }));
+        });
+        return function () {
+          disposers.forEach(function (d) { if (d) d(); });
+        };
       });
     }
 

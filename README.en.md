@@ -76,13 +76,19 @@ On top of enabling a permission, there is a **second, per-call confirmation** be
 
 - When the model calls any **write tool** (i.e. any tool listed in `CATEGORY_TOOLS` of `server/src/permissions.ts`, such as `setObjectSource` / `deleteObject` / `activateObjects` / `createTransport` / `renameExecute` / `pushRepo` / `debuggerSetBreakpoints`, …), DSH shows its **native approval card** with:
   - the tool name (e.g. `mcp__abap__setObjectSource`)
-  - a human-readable summary of what will be written (target object name, URL, transport; for source/content arguments it shows an actual snippet plus total length / line count, not a black box)
+  - a human-readable summary of what will be written (target object name, URL, transport)
+  - **for source-writing tools (`setObjectSource` / `createObject` / `createTestInclude`) a real "old → new" line-level diff**: the card inlines each change's `-`/`+` lines with line numbers and change counts (`+N/-M`); new objects show the full source line count
   - an **Allow once / Reject** choice
+- **Numbered expandable preview card**: while a write tool runs, the conversation's tool card renders a "Write preview" — one **numbered button per change**; clicking a number expands that change's `-`/`+` diff. Large diffs are **never truncated** — content loads on demand. Approve/reject still lives on the native approval card; this card exists only to make clear "what will actually change".
 - The write is forwarded to SAP **only after the user clicks "Allow once"**; rejection, cancellation, or an unavailable approval channel all **fail closed** (nothing is written).
 - This reuses DSH's native approval channel (`ctx.approval` — the same mechanism used for file writes and command escalation), with built-in audit logging and no extra UI.
 - Read-only tools bypass this gate and are unaffected.
 - **With `writeConfirm` OFF**: write tools execute directly once their permission is enabled, without prompting (not recommended — only when you fully trust the write operations).
 - The switch state is reflected in `abap_mcp_status.writeConfirm`; it does not participate in reconnect decisions.
+
+### Security hardening: `runQuery` is read-only SQL only
+
+`runQuery` lives in the read-only core, but it targets ADT Data Preview's freestyle SQL endpoint — some backends allow DML there. To stop it becoming a "no-permission, no-confirmation" hidden write channel, the server applies a **deterministic allowlist**: only a single statement starting with `SELECT` / `WITH` / `EXPLAIN` / `DESCRIBE` is allowed, and semicolon-stacked multi-statements are rejected. Anything like `UPDATE` / `INSERT` / `DELETE` / `DROP` is refused and never sent to the backend.
 
 ## Installation
 

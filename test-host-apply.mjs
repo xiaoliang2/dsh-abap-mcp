@@ -26,6 +26,10 @@ const base = {
 let stored = { ...base };
 const scope = {
   get: () => stored,
+  set: (key, value) => {
+    stored = { ...stored, [key]: value };
+    return Promise.resolve();
+  },
   update: (patch) => {
     stored = { ...stored, ...patch };
     return Promise.resolve();

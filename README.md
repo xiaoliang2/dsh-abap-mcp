@@ -98,13 +98,19 @@ server/dist/index.js（MCP 服务器，权限在这里强制生效）
 
 - 模型调用任意**写工具**（即 `server/src/permissions.ts` 里 `CATEGORY_TOOLS` 列出的工具，如 `setObjectSource` / `deleteObject` / `activateObjects` / `createTransport` / `renameExecute` / `pushRepo` / `debuggerSetBreakpoints` 等）时，DSH 会弹出**原生审批卡**，展示：
   - 工具名（如 `mcp__abap__setObjectSource`）
-  - 将写入的对象/参数摘要（目标对象名、URL、传输号；源码/内容类参数显示实际内容片段与总长度/行数，不截断成黑盒）
+  - 将写入的对象/参数摘要（目标对象名、URL、传输号）
+  - **源码类写操作（`setObjectSource` / `createObject` / `createTestInclude`）会先做真实的「旧 → 新」行级 diff**：审批卡内联显示每处改动的 `-`/`+` 行（含行号、改动计数 `+N/-M`），新建对象则显示完整源码行数
   - 一次「允许一次 / 拒绝」的选择
+- **「序号 + 点击展开」工具卡**：写工具执行时，对话流里的工具卡会渲染「写前预览」——每处改动一个**序号按钮**，点击即展开该处 `-`/`+` 差异；改动再多也**不省略**，按需加载。审批按钮仍在原生审批卡上，本卡只负责让用户看清「到底会改成什么」。
 - 只有用户点击**「允许一次」**，该次写操作才会真正向 SAP 执行；**拒绝 / 取消 / 无审批通道时一律不写入**（fail-closed）。
 - 该机制复用 DSH 原生审批通道（`ctx.approval`，与文件写入、命令执行的越权审批同款），自带审计日志，无需额外 UI。
 - 只读工具不经过此确认，不受影响。
 - **关闭 `writeConfirm` 后**：写工具在对应权限已开启时直接执行、不弹审批（不推荐，仅当对写操作有充分信任时使用）。
 - 开关状态会反映在 `abap_mcp_status.writeConfirm`；该字段不参与重连判定。
+
+### 安全加固：`runQuery` 仅允许只读 SQL
+
+`runQuery` 虽然列在只读核心，但它走 ADT Data Preview 的 freestyle SQL 端点——部分后端允许 DML。为避免它成为「无权限、无写确认」的隐藏写通道，服务器侧已做**确定性白名单**：只放行以 `SELECT` / `WITH` / `EXPLAIN` / `DESCRIBE` 开头的单条语句，且不允许分号拼接多语句；命中 `UPDATE` / `INSERT` / `DELETE` / `DROP` 等一律拒绝，绝不把语句发给后端。
 
 ## 安装
 
