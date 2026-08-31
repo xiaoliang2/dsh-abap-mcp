@@ -15,8 +15,14 @@ DeepSeek Harness 插件：通过 [MCP](https://modelcontextprotocol.io) 连接 *
 
 > 上游服务器：[mario-andreschak/mcp-abap-abap-adt-api](https://github.com/mario-andreschak/mcp-abap-abap-adt-api)
 > 本插件在 `server/` 里内置了**加了权限层**的服务器副本（默认只读 + 开关），并负责连接、注册工具、随设置变更重连。
-<img width="911" height="928" alt="图片" src="https://github.com/user-attachments/assets/38c245a5-2c60-4d80-a536-a4ecd5c7b625" />
-<img width="1213" height="733" alt="图片" src="https://github.com/user-attachments/assets/d64dd92a-d53e-4ad5-ac91-9b77121e400b" />
+
+**设置页面**
+
+<img width="911" height="928" alt="设置页面截图" src="https://github.com/user-attachments/assets/38c245a5-2c60-4d80-a536-a4ecd5c7b625" />
+
+**对话验证**
+
+<img width="1213" height="733" alt="对话验证截图" src="https://github.com/user-attachments/assets/d64dd92a-d53e-4ad5-ac91-9b77121e400b" />
 
 
 ---
@@ -130,7 +136,7 @@ dsh plugin add @xiaobanli/dsh-abap-mcp
 ```json
 {
   "dependencies": {
-    "@xiaobanli/dsh-abap-mcp": "link:C:/othersoftware/harness/harness/project6/dsh-abap-mcp"
+    "@xiaobanli/dsh-abap-mcp": "link:<你的本地插件目录绝对路径>/dsh-abap-mcp"
   },
   "dsh": { "profile": { "bundles": [ "...", "dsh-abap-mcp" ] } }
 }
