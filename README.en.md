@@ -7,7 +7,8 @@ A DeepSeek Harness (DSH) plugin that connects to SAP systems via **MCP (Model Co
 - **Flexible connection config**: enable/disable, URL, user, password, client, language.
 
 > 中文版见 [README.md](./README.md) · Chinese version: [README.md](./README.md)
-
+<img width="911" height="928" alt="图片" src="https://github.com/user-attachments/assets/38c245a5-2c60-4d80-a536-a4ecd5c7b625" />
+<img width="1213" height="733" alt="图片" src="https://github.com/user-attachments/assets/d64dd92a-d53e-4ad5-ac91-9b77121e400b" />
 ## Features
 
 - Runs an MCP server as a child process of the DSH host, speaking the standard MCP protocol.
