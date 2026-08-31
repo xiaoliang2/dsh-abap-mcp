@@ -128,6 +128,12 @@ export const READ_ONLY_TOOLS: ReadonlySet<string> = new Set([
   // revisions & health
   'revisions',
   'healthcheck',
+  // source grep (read-only, client-side regex over fetched sources)
+  'grepObjects',
+  'grepPackages',
+  // system info (read-only, from T000/CVERS)
+  'getSystemInfo',
+  'getInstalledComponents',
 ]);
 
 // Tools gated behind each optional category.

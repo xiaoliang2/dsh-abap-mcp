@@ -40,7 +40,7 @@ Host 插件 lib/index.js
   4. 配置变更 → 去抖重连；连接断开 → 有界退避重试
         ▼
 server/dist/index.js（MCP 服务器，权限在这里强制生效）
-  - MCP_ABAP_PERMISSIONS 未设置 → 默认只读（约 75 个只读工具）
+  - MCP_ABAP_PERMISSIONS 未设置 → 默认只读（约 80 个只读工具）
   - 7 类写权限通过 MCP_ABAP_PERMISSIONS 的 JSON 开关启用
 ```
 
@@ -51,7 +51,7 @@ server/dist/index.js（MCP 服务器，权限在这里强制生效）
 
 权限模型在 **server 侧强制**（`server/src/permissions.ts` → `dist/permissions.js`）。默认**只读核心**始终开启；7 类写权限默认全关，通过 `MCP_ABAP_PERMISSIONS` 环境变量按类别开启。**未登记的任何工具一律拒绝**（deny-by-default），新增的 handler 不会悄悄放开。
 
-### 只读核心（~75 个工具，始终开启）
+### 只读核心（~80 个工具，始终开启）
 
 | 子分组 | 工具 | 说明 |
 |---|---|---|
@@ -60,6 +60,8 @@ server/dist/index.js（MCP 服务器，权限在这里强制生效）
 | 类内省 | `classIncludes` `classComponents` | 类的 include 组成 / 组件列表 |
 | 代码分析（只读） | `syntaxCheckCode` `syntaxCheckCdsUrl` `codeCompletion` `findDefinition` `usageReferences` `syntaxCheckTypes` `codeCompletionFull` `codeCompletionElement` `usageReferenceSnippets` `fixProposals` `fixEdits` `fragmentMappings` `abapDocumentation` | 语法检查 / 补全 / 定义跳转 / 引用查询 / 修复建议 / 文档（只读） |
 | 源码读取 | `getObjectSource` | 读取对象源码 |
+| 源码检索（grep） | `grepObjects` `grepPackages` | 按正则搜索对象源码：先按名/按包圈定候选，再逐个拉源码做行匹配（只读） |
+| 系统信息 | `getSystemInfo` `getInstalledComponents` | SID / 客户端 / NetWeaver-ABAP 版本 / 已安装组件（来自 T000/CVERS，只读） |
 | 非活动对象 | `inactiveObjects` | 列出未激活对象 |
 | 注册 / 校验 | `objectRegistrationInfo` `validateNewObject` | 对象注册信息 / 新建对象参数校验（只读） |
 | 传输读取 | `transportInfo` `hasTransportConfig` `transportConfigurations` `getTransportConfiguration` `userTransports` `transportsByConfig` `systemUsers` `transportReference` | 传输请求信息 / 用户传输 / 配置 / 系统用户（只读） |
@@ -161,7 +163,7 @@ dsh plugin add @xiaobanli/dsh-abap-mcp
 ### 推荐操作流程
 
 1. 在卡片填好 SAP 地址 / 用户名 / 密码（密码写入 DSH 凭据库，卡片只写不读）。
-2. 先点「测试连接」：显示成功（工具数约 75）即说明配置与网络都没问题。
+2. 先点「测试连接」：显示成功（工具数约 80）即说明配置与网络都没问题。
 3. 再打开「启用连接」开关（总开关）。
 4. **稍等几秒**，再查看连接状态（卡片状态块，或在对话里问模型 `abap_mcp_status`）。
    - 状态变为「已连接 / read-only / N 个工具」即成功。

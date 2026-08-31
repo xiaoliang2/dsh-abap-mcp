@@ -18,7 +18,7 @@ A DeepSeek Harness (DSH) plugin that connects to SAP systems via **MCP (Model Co
 ## Features
 
 - Runs an MCP server as a child process of the DSH host, speaking the standard MCP protocol.
-- Registers ~75 **read-only** tools (search, object structure, source reading, syntax check, code completion, reference lookup, DDIC reading, transport reading, table/SQL read, ATC/trace reading, revisions, health check, ...).
+- Registers ~80 **read-only** tools (search, object structure, source reading, source grep, system info, syntax check, code completion, reference lookup, DDIC reading, transport reading, table/SQL read, ATC/trace reading, revisions, health check, ...).
 - 7 write categories (`sourceWrite`, `transports`, `refactor`, `exec`, `git`, `debug`, `serviceBinding`), off by default, gated server-side.
 - Settings card on the DSH settings page + `abap_mcp_status` tool for connection status.
 - Keep-alive: reconnects with bounded backoff (max 5 attempts) when config changes.
@@ -27,7 +27,7 @@ A DeepSeek Harness (DSH) plugin that connects to SAP systems via **MCP (Model Co
 
 The permission model is enforced **server-side** (`server/src/permissions.ts` â†’ `dist/permissions.js`). The **read-only core** is always on; the 7 write categories are off by default and are enabled per category via the `MCP_ABAP_PERMISSIONS` environment variable. **Any tool not registered is denied by default** (deny-by-default), so a newly added handler can never slip through.
 
-### Read-only core (~75 tools, always available)
+### Read-only core (~80 tools, always available)
 
 | Sub-group | Tools | Purpose |
 |---|---|---|
@@ -36,6 +36,8 @@ The permission model is enforced **server-side** (`server/src/permissions.ts` â†
 | Class introspection | `classIncludes` `classComponents` | Class includes / component listing |
 | Code analysis (read-only) | `syntaxCheckCode` `syntaxCheckCdsUrl` `codeCompletion` `findDefinition` `usageReferences` `syntaxCheckTypes` `codeCompletionFull` `codeCompletionElement` `usageReferenceSnippets` `fixProposals` `fixEdits` `fragmentMappings` `abapDocumentation` | Syntax check / completion / definition jump / reference lookup / fix proposals / documentation |
 | Source reading | `getObjectSource` | Read object source code |
+| Source grep | `grepObjects` `grepPackages` | Regex search over object sources: narrow candidates by name/package, then fetch sources and match per line (read-only) |
+| System info | `getSystemInfo` `getInstalledComponents` | SID / client / NetWeaver-ABAP release / installed components (from T000/CVERS, read-only) |
 | Inactive objects | `inactiveObjects` | List inactive objects |
 | Registration / validation | `objectRegistrationInfo` `validateNewObject` | Object registration info / new-object parameter validation (read-only) |
 | Transport reading | `transportInfo` `hasTransportConfig` `transportConfigurations` `getTransportConfiguration` `userTransports` `transportsByConfig` `systemUsers` `transportReference` | Transport request info / user transports / configs / system users (read-only) |
@@ -137,7 +139,7 @@ After restarting DSH, an "ABAP MCP" card appears on the left side of the setting
 ### Recommended workflow
 
 1. Fill in the SAP URL / username / password on the card (the password is stored in the DSH credentials store; the card is write-only).
-2. Click "Test connection" first: a success result (~75 tools) means the config and network are fine.
+2. Click "Test connection" first: a success result (~80 tools) means the config and network are fine.
 3. Then turn on the "Enable connection" master switch.
 4. **Wait a few seconds**, then check the connection status (the status block on the card, or ask the model for `abap_mcp_status`).
    - "Connected / read-only / N tools" means success.
