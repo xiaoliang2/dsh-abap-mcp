@@ -1,14 +1,15 @@
-// 验证 client.js 的 factory 能求值并返回插件（mock window.__ModuleLoader__ + 真实 React）
+// 验证 client.js 的 factory 能求值并返回插件（mock window.__ModuleLoader__ + React 桩）
 import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
 
-// React 在共享依赖层（profiles/node_modules），从那里解析；
-// 用系统用户主目录推导，避免硬编码本机用户名/路径。
-const profilesRoot = join(homedir(), '.dsh', 'profiles', 'node_modules');
-const sharedRequire = createRequire(join(profilesRoot, 'react', 'package.json'));
-const React = sharedRequire('react');
+// 自带 React 桩：这里只跑 factory + apply，不渲染组件，
+// 所以不依赖 ~/.dsh/profiles/node_modules 里是否装了 react。
+const React = {
+  createElement: (type, props, ...children) => ({ type, props: Object.assign({}, props || {}, { children }) }),
+  useState: (initial) => [typeof initial === 'function' ? initial() : initial, () => {}],
+  useEffect: () => {},
+  useRef: (initial) => ({ current: initial }),
+  useSyncExternalStore: (_subscribe, getSnapshot) => getSnapshot(),
+};
 
 const src = readFileSync(new URL('./client/client.js', import.meta.url), 'utf8');
 
@@ -43,6 +44,7 @@ console.log('name:', moduleObj.name, '| inject:', JSON.stringify(moduleObj.injec
 // 用 mock ctx 跑 apply，验证注册逻辑不抛
 const NS = 'abapMcp';
 const slotRegistrations = [];
+const remote = { $on: () => () => {} };
 const ctx = {
   locale: {
     register: () => {},
@@ -51,6 +53,8 @@ const ctx = {
   settingsScope: {
     bind: () => ({ subscribe: () => () => {}, getSnapshot: () => ({ value: {} }), set: () => Promise.resolve() }),
   },
+  // 可选服务统一走 ctx.get：remote 提供凭据通道，connection 只有旧版才带 api。
+  get: (name) => (name === 'remote' ? remote : undefined),
   slots: {
     inject: (name, fn) => {
       if (name === 'settings.section') {

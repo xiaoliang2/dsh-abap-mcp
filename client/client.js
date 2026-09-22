@@ -201,7 +201,7 @@ window.__ModuleLoader__.load({
       },
     };
 
-    function AbapMcpCard({ t, scope, api, remote, passwordRef }) {
+    function AbapMcpCard({ t, scope, credentials, remote, passwordRef }) {
       var snapshot = useSyncExternalStore(
         function (subscribe) {
           return scope.subscribe(subscribe);
@@ -249,46 +249,42 @@ window.__ModuleLoader__.load({
       var setPwdConfigured = pwdState[1];
 
       function readPasswordConfigured() {
-        if (!api) return Promise.resolve(false);
-        return api.credentials.describe({ refs: [passwordRef] }).then(function (resp) {
-          var view = resp && resp.result && resp.result.value && resp.result.value.credentials
-            ? resp.result.value.credentials[passwordRef]
-            : null;
+        if (!credentials) return Promise.resolve(false);
+        return credentials.describe([passwordRef]).then(function (info) {
+          var view = info ? info[passwordRef] : null;
           var next = !!(view && view.configured);
           setPwdConfigured(next);
           return next;
         }).catch(function () { return false; });
       }
 
-      // 密码写入 DSH 凭据库（api.credentials.set），写后清掉本地回显、刷新“已配置”状态。
+      // 密码写入 DSH 凭据库（credentials.set），写后清掉本地回显、刷新“已配置”状态。
       function writePassword(value) {
-        if (!api) return Promise.resolve();
-        return api.credentials.set({ ref: passwordRef, value: value }).then(function () {
+        if (!credentials) return Promise.resolve();
+        return credentials.set(passwordRef, value).then(function () {
           setDraft(Object.assign({}, draft, { password: "" }));
           return readPasswordConfigured();
         }).catch(function () { return false; });
       }
 
       function clearPassword() {
-        if (!api) return;
-        api.credentials.unset({ ref: passwordRef }).then(readPasswordConfigured).catch(function () {});
+        if (!credentials) return;
+        credentials.unset(passwordRef).then(readPasswordConfigured).catch(function () {});
       }
 
       // 挂载时读一次“是否已配置密码”，并订阅凭据变更事件保持同步（例如其他入口写了同一引用）。
       React.useEffect(function () {
-        if (!api) return;
+        if (!credentials) return;
         var cancelled = false;
         function refresh() {
-          api.credentials.describe({ refs: [passwordRef] }).then(function (resp) {
+          credentials.describe([passwordRef]).then(function (info) {
             if (cancelled) return;
-            var view = resp && resp.result && resp.result.value && resp.result.value.credentials
-              ? resp.result.value.credentials[passwordRef]
-              : null;
+            var view = info ? info[passwordRef] : null;
             setPwdConfigured(!!(view && view.configured));
           }).catch(function () {});
         }
         refresh();
-        if (!remote) return function () { cancelled = true; };
+        if (!remote || typeof remote.$on !== "function") return function () { cancelled = true; };
         var off = remote.$on("credentials/reference-updated", function (ref) {
           if (ref === passwordRef) refresh();
         });
@@ -672,9 +668,55 @@ window.__ModuleLoader__.load({
     }
 
     var name = "dsh-abap-mcp";
-    var inject = ["slots", "locale", "settingsScope", "connection", "remote"];
+    // connection 只作为旧版回退，用 ctx.get 可选读取，不列入硬依赖。
+    var inject = ["slots", "locale", "settingsScope", "remote"];
     // 与 Host 侧一致的凭据引用名（SAP 密码）。
     var PASSWORD_REF = "SAP_PASSWORD";
+
+    // 凭据读写入口。当前 DSH 的凭据走 ctx.remote.credentials（Typert 远程命名空间，
+    // 每次调用解析为 { ok: true, value } 或 { ok: false, error }）；旧版本把同样的
+    // 能力挂在 ctx.connection.api.credentials 上（信封为 { result: { value } }）。
+    // 这里统一归一化成 { describe(refs), set(ref, value), unset(ref) }：读回
+    // { <ref>: { configured } }，写/清除失败时 reject。两条路都没有时返回 null，
+    // 密码读写降级为不发请求（连接仍可用环境变量 SAP_PASSWORD 兜底）。
+    function credentialsFace(ctx) {
+      var remote = ctx.get("remote");
+      if (remote && remote.credentials && typeof remote.credentials.describe === "function") {
+        return {
+          describe: function (refs) {
+            return remote.credentials.describe(refs).then(function (r) {
+              if (r && r.ok === false) throw r.error;
+              return (r && r.value) || {};
+            });
+          },
+          set: function (ref, value) {
+            return remote.credentials.set(ref, value).then(function (r) {
+              if (r && r.ok === false) throw r.error;
+            });
+          },
+          unset: function (ref) {
+            return remote.credentials.unset(ref).then(function (r) {
+              if (r && r.ok === false) throw r.error;
+            });
+          },
+        };
+      }
+      var conn = ctx.get("connection");
+      var legacy = conn && conn.api && conn.api.credentials ? conn.api.credentials : null;
+      if (legacy) {
+        return {
+          describe: function (refs) {
+            return legacy.describe({ refs: refs }).then(function (resp) {
+              var view = resp && resp.result && resp.result.value;
+              return (view && view.credentials) || {};
+            });
+          },
+          set: function (ref, value) { return legacy.set({ ref: ref, value: value }); },
+          unset: function (ref) { return legacy.unset({ ref: ref }); },
+        };
+      }
+      return null;
+    }
 
     function apply(ctx) {
       ctx.effect(function () {
@@ -682,8 +724,7 @@ window.__ModuleLoader__.load({
       }, "dsh-abap-mcp: dictionaries");
       var t = ctx.locale.bind(NS);
       var scope = ctx.settingsScope.bind({ namespace: NS });
-      var conn = ctx.get("connection");
-      var api = conn && conn.api ? conn.api : null;
+      var credentials = credentialsFace(ctx);
       var remote = ctx.get("remote") || null;
       ctx.slots.inject("settings.section", function () {
         return ctx.slots.register({
@@ -695,7 +736,7 @@ window.__ModuleLoader__.load({
           return React.createElement(AbapMcpCard, {
             t: t,
             scope: scope,
-            api: api,
+            credentials: credentials,
             remote: remote,
             passwordRef: PASSWORD_REF
           });
