@@ -668,8 +668,11 @@ window.__ModuleLoader__.load({
     }
 
     var name = "dsh-abap-mcp";
+    // remote.credentials 是独立注册的作用域服务键（键名就是 "remote.credentials"），
+    // 跨 realm 必须显式 inject；不写 inject 就访问 remote.credentials 会被 cordis 的
+    // 服务守卫拦下（cannot get property "remote.credentials" without inject）。
     // connection 只作为旧版回退，用 ctx.get 可选读取，不列入硬依赖。
-    var inject = ["slots", "locale", "settingsScope", "remote"];
+    var inject = ["slots", "locale", "settingsScope", "remote", "remote.credentials"];
     // 与 Host 侧一致的凭据引用名（SAP 密码）。
     var PASSWORD_REF = "SAP_PASSWORD";
 
@@ -680,40 +683,47 @@ window.__ModuleLoader__.load({
     // { <ref>: { configured } }，写/清除失败时 reject。两条路都没有时返回 null，
     // 密码读写降级为不发请求（连接仍可用环境变量 SAP_PASSWORD 兜底）。
     function credentialsFace(ctx) {
-      var remote = ctx.get("remote");
-      if (remote && remote.credentials && typeof remote.credentials.describe === "function") {
+      // 既已 inject，就按作用域键直接取：ctx.get 是方法调用，不经过属性守卫。
+      var ns = ctx.get("remote.credentials");
+      if (ns !== undefined && ns !== null && typeof ns.describe === "function") {
         return {
           describe: function (refs) {
-            return remote.credentials.describe(refs).then(function (r) {
+            return ns.describe(refs).then(function (r) {
               if (r && r.ok === false) throw r.error;
               return (r && r.value) || {};
             });
           },
           set: function (ref, value) {
-            return remote.credentials.set(ref, value).then(function (r) {
+            return ns.set(ref, value).then(function (r) {
               if (r && r.ok === false) throw r.error;
             });
           },
           unset: function (ref) {
-            return remote.credentials.unset(ref).then(function (r) {
+            return ns.unset(ref).then(function (r) {
               if (r && r.ok === false) throw r.error;
             });
           },
         };
       }
-      var conn = ctx.get("connection");
-      var legacy = conn && conn.api && conn.api.credentials ? conn.api.credentials : null;
-      if (legacy) {
-        return {
-          describe: function (refs) {
-            return legacy.describe({ refs: refs }).then(function (resp) {
-              var view = resp && resp.result && resp.result.value;
-              return (view && view.credentials) || {};
-            });
-          },
-          set: function (ref, value) { return legacy.set({ ref: ref, value: value }); },
-          unset: function (ref) { return legacy.unset({ ref: ref }); },
-        };
+      // 旧版回退：connection 上没有 api 时，属性守卫在隔离 realm 下可能直接抛错，
+      // 所以整段探测包在 try/catch 里，探测失败等同于「没有旧版通道」。
+      try {
+        var conn = ctx.get("connection");
+        var legacy = conn && conn.api && conn.api.credentials ? conn.api.credentials : null;
+        if (legacy) {
+          return {
+            describe: function (refs) {
+              return legacy.describe({ refs: refs }).then(function (resp) {
+                var view = resp && resp.result && resp.result.value;
+                return (view && view.credentials) || {};
+              });
+            },
+            set: function (ref, value) { return legacy.set({ ref: ref, value: value }); },
+            unset: function (ref) { return legacy.unset({ ref: ref }); },
+          };
+        }
+      } catch (e) {
+        // 当前版本 connection 无 api：忽略，走降级。
       }
       return null;
     }

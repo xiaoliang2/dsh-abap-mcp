@@ -86,7 +86,22 @@ function walk(node, visit) {
   walk(node.props.children, visit);
 }
 
-/** 造一个 mock ctx；credentials 为空时模拟没有可用凭据通道的环境。 */
+/**
+ * 模拟 cordis 的服务守卫：未声明/不可见的作用域服务键在属性访问时直接抛错，
+ * 而不是返回 undefined。真实运行时报的就是
+ * `cannot get property "remote.credentials" without inject`。
+ */
+function guarded(known) {
+  return new Proxy(known, {
+    get(target, prop) {
+      if (typeof prop === 'symbol' || prop === 'then') return target[prop];
+      if (prop in target) return target[prop];
+      throw new Error('cannot get property "' + String(prop) + '" without inject');
+    },
+  });
+}
+
+/** 造一个 mock ctx；withRemote 为 false 时模拟没有凭据命名空间的环境。 */
 function makeCtx({ withRemote = true } = {}) {
   const calls = { describe: [], set: [], unset: [] };
   const credentials = {
@@ -103,9 +118,10 @@ function makeCtx({ withRemote = true } = {}) {
       return Promise.resolve({ ok: true, value: undefined });
     },
   };
-  const remote = withRemote
-    ? { credentials, $on: () => () => {} }
-    : { $on: () => () => {} };
+  // remote 服务本身只有 $on：credentials 是独立作用域键，从它上面取属性会被守卫拦下。
+  const remote = guarded({ $on: () => () => {} });
+  // 当前版本 connection 上没有 api，取 api 同样触发守卫。
+  const connection = guarded({ reconnect: () => {} });
   let render = null;
   const ctx = {
     locale: { register: () => () => {}, bind: () => (key) => key },
@@ -116,10 +132,10 @@ function makeCtx({ withRemote = true } = {}) {
         set: () => Promise.resolve(),
       }),
     },
-    remote,
     get(name) {
+      if (name === 'remote.credentials') return withRemote ? credentials : undefined;
       if (name === 'remote') return remote;
-      if (name === 'connection') return undefined;
+      if (name === 'connection') return connection;
       return undefined;
     },
     slots: {
@@ -164,6 +180,10 @@ function findOne(tree, predicate, what) {
   if (!Array.isArray(plugin.inject)) fail('plugin.inject 不是数组');
   if (plugin.inject.includes('connection')) fail('connection 不该再是硬依赖: ' + JSON.stringify(plugin.inject));
   if (!plugin.inject.includes('remote')) fail('remote 应在硬依赖里: ' + JSON.stringify(plugin.inject));
+  // remote.<ns> 是独立作用域键：不 inject 就会被 cordis 的服务守卫拦下。
+  if (!plugin.inject.includes('remote.credentials')) {
+    fail('remote.credentials 必须在 inject 里: ' + JSON.stringify(plugin.inject));
+  }
 
   plugin.apply(ctx);
   const render = getRender();
