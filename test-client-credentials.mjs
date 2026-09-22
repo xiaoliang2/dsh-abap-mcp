@@ -243,4 +243,27 @@ function findOne(tree, predicate, what) {
   console.log('OK  无凭据通道: 卡片照常渲染，不发调用');
 }
 
+// ---- 3) 凭据探测自身抛错时：插件仍须挂载（上次就是这样把整页打挂的） ----
+{
+  const { ctx, getRender } = makeCtx();
+  const originalGet = ctx.get;
+  ctx.get = (name) => {
+    if (name === 'remote.credentials') throw new Error('cannot get property "remote.credentials" without inject');
+    return originalGet(name);
+  };
+  const realError = console.error;
+  console.error = () => {};
+  try {
+    const plugin = spec.factory(requireStub);
+    plugin.apply(ctx); // 不应抛
+    const render = getRender();
+    if (typeof render !== 'function') fail('凭据探测抛错时仍应注册 settings.section');
+    const tree = renderCard(render);
+    findOne(tree, (n) => n.type === 'input' && n.props.type === 'password', '密码输入框');
+  } finally {
+    console.error = realError;
+  }
+  console.log('OK  凭据探测抛错: 插件照常挂载，卡片照常渲染');
+}
+
 console.log('PASS');

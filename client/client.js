@@ -734,7 +734,14 @@ window.__ModuleLoader__.load({
       }, "dsh-abap-mcp: dictionaries");
       var t = ctx.locale.bind(NS);
       var scope = ctx.settingsScope.bind({ namespace: NS });
-      var credentials = credentialsFace(ctx);
+      // 凭据通道探测失败（服务守卫/命名空间缺失）不该拖着整个插件一起失败：
+      // 落到 null，卡片其余功能照常注册，只在控制台留一条记录。
+      var credentials = null;
+      try {
+        credentials = credentialsFace(ctx);
+      } catch (e) {
+        console.error("[dsh-abap-mcp] credentials channel unavailable:", String(e));
+      }
       var remote = ctx.get("remote") || null;
       ctx.slots.inject("settings.section", function () {
         return ctx.slots.register({
